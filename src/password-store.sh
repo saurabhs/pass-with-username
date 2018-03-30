@@ -358,15 +358,24 @@ cmd_show() {
 	[[ $err -ne 0 || ( $qrcode -eq 1 && $clip -eq 1 ) ]] && die "Usage: $PROGRAM $COMMAND [--clip[=line-number],-c[line-number]] [--qrcode[=line-number],-q[line-number]] [pass-name]"
 
 	local path="$1"
+	local userfile="$PREFIX/${path}_user.gpg"
 	local passfile="$PREFIX/$path.gpg"
+	local username="NA"
 	check_sneaky_paths "$path"
 	if [[ -f $passfile ]]; then
 		if [[ $clip -eq 0 && $qrcode -eq 0 ]]; then
-			$GPG -d "${GPG_OPTS[@]}" "$passfile" || exit $?
+			if [[ -f $userfile ]]; then
+				echo "Username : " $($GPG -d "${GPG_OPTS[@]}" "$userfile" || exit 1)
+			fi
+			echo "Password : " $($GPG -d "${GPG_OPTS[@]}" "$passfile" || exit $?)
 		else
 			[[ $selected_line =~ ^[0-9]+$ ]] || die "Clip location '$selected_line' is not a number."
+			if [[ -f $userfile ]]; then
+				username="$($GPG -d "${GPG_OPTS[@]}" "$userfile" | tail -n +${selected_line} | head -n 1)"
+			fi
 			local pass="$($GPG -d "${GPG_OPTS[@]}" "$passfile" | tail -n +${selected_line} | head -n 1)"
 			[[ -n $pass ]] || die "There is no password to put on the clipboard at line ${selected_line}."
+			echo "Username : $username"
 			if [[ $clip -eq 1 ]]; then
 				clip "$pass" "$path"
 			elif [[ $qrcode -eq 1 ]]; then
@@ -379,7 +388,7 @@ cmd_show() {
 		else
 			echo "${path%\/}"
 		fi
-		tree -C -l --noreport "$PREFIX/$path" | tail -n +2 | sed -E 's/\.gpg(\x1B\[[0-9]+m)?( ->|$)/\1\2/g' # remove .gpg at end of line, but keep colors
+		tree -C -l --noreport -I "*_user.gpg" "$PREFIX/$path" | tail -n +2 | sed -E 's/\.gpg(\x1B\[[0-9]+m)?( ->|$)/\1\2/g' # filter username files and remove .gpg at end of line, but keep colors
 	elif [[ -z $path ]]; then
 		die "Error: password store is empty. Try \"pass init\"."
 	else
@@ -424,6 +433,7 @@ cmd_insert() {
 
 	[[ $err -ne 0 || ( $multiline -eq 1 && $noecho -eq 0 ) || $# -ne 1 ]] && die "Usage: $PROGRAM $COMMAND [--echo,-e | --multiline,-m] [--force,-f] pass-name"
 	local path="${1%/}"
+	local userfile="$PREFIX/${path}_user.gpg"
 	local passfile="$PREFIX/$path.gpg"
 	check_sneaky_paths "$path"
 	set_git "$passfile"
@@ -438,13 +448,15 @@ cmd_insert() {
 		echo
 		$GPG -e "${GPG_RECIPIENT_ARGS[@]}" -o "$passfile" "${GPG_OPTS[@]}" || die "Password encryption aborted."
 	elif [[ $noecho -eq 1 ]]; then
-		local password password_again
+		local username password password_again
 		while true; do
+			read -r -p "Enter username for $path: " username || exit 1
 			read -r -p "Enter password for $path: " -s password || exit 1
 			echo
 			read -r -p "Retype password for $path: " -s password_again || exit 1
 			echo
 			if [[ $password == "$password_again" ]]; then
+				$GPG -e "${GPG_RECIPIENT_ARGS[@]}" -o "$userfile" "${GPG_OPTS[@]}" <<<"$username"
 				$GPG -e "${GPG_RECIPIENT_ARGS[@]}" -o "$passfile" "${GPG_OPTS[@]}" <<<"$password" || die "Password encryption aborted."
 				break
 			else
