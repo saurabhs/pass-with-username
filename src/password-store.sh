@@ -365,9 +365,9 @@ cmd_show() {
 	if [[ -f $passfile ]]; then
 		if [[ $clip -eq 0 && $qrcode -eq 0 ]]; then
 			if [[ -f $userfile ]]; then
-				echo "Username : " $($GPG -d "${GPG_OPTS[@]}" "$userfile" || exit 1)
+				echo "Username :" $($GPG -d "${GPG_OPTS[@]}" "$userfile" || exit 1)
 			fi
-			echo "Password : " $($GPG -d "${GPG_OPTS[@]}" "$passfile" || exit $?)
+			echo "Password :" $($GPG -d "${GPG_OPTS[@]}" "$passfile" || exit $?)
 		else
 			[[ $selected_line =~ ^[0-9]+$ ]] || die "Clip location '$selected_line' is not a number."
 			if [[ -f $userfile ]]; then
